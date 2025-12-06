@@ -4,6 +4,7 @@ import random
 
 # pygame setup
 pygame.init()
+screen_buffer = pygame.Surface((1280, 720))
 screen = pygame.display.set_mode((1280, 720))
 clock = pygame.time.Clock()
 running = True
@@ -12,7 +13,13 @@ running = True
 # Simulation parameters
 min_distance = 10 # min distance between attractor and fluid particles
 particle_size = 20 # radius of particle size
-particle_repel_range = 20
+particle_repel_range = 20 # The range in which particles repel
+minimum_movement_magnitude = 0.15 # The minimum magnitude required to be added to a particle's velocity
+movement_multiplier = 0.125 # The amount the particles movement is multiplied by before being added
+velocity_falloff_rate = 0.75 # velocity falls off at this rate
+max_particle_size = 30
+
+
 
 def distance_between(x1, y1, x2, y2):
     return math.sqrt((x2-x1)**2 + (y2-y1)**2)
@@ -23,11 +30,13 @@ class Attractor:
         self.y = y
         self.dx = dx
         self.dy = dy
+        self.particle_size = 0
         self.particles = []
         return
     def move(self):
         self.x += self.dx
         self.y += self.dy
+        if self.particle_size < max_particle_size : self.particle_size += 0.1
 
     def getVector(self):
         return pygame.Vector2(self.x, self.y)
@@ -65,10 +74,10 @@ class FluidParticle:
 
         # repel if it's close
 
-        if movement.magnitude() * 0.125 > 0.15:
-            self.velocity += movement * 0.125
+        if (movement.magnitude() * movement_multiplier) > minimum_movement_magnitude:
+            self.velocity += movement * movement_multiplier
 
-        self.velocity *= 0.75
+        self.velocity *= velocity_falloff_rate
 
         self.x += self.velocity.x * 0.5
         self.y += self.velocity.y * 0.5
@@ -76,13 +85,14 @@ class FluidParticle:
         return
 
 
+ticks = 0
 simulation = [Attractor(512, 512, 0.001, 0.2)]
 
 for i in range(15):
     att = simulation[0]
     simulation[0].particles.append(FluidParticle(
-        att.x + random.randint(-500, 500),
-        att.y + random.randint(-500, 500),
+        att.x + random.randint(-200, 200),
+        att.y + random.randint(-200, 200),
         att
         ))
 
@@ -93,21 +103,53 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    # fill the screen with a color to wipe away anything from last frame
-    screen.fill("black")
+    # fill the screen_buffer with a color to wipe away anything from last frame
+    screen_buffer.fill("black")
 
     # RENDER YOUR GAME HERE
 
-    pygame.draw.circle(screen, "yellow", (512, 512), 5)
+    pygame.draw.circle(screen_buffer, "yellow", (512, 512), 5)
 
     for attractor in simulation:
         attractor.move()
-        pygame.draw.circle(screen, "red", (attractor.x, attractor.y), 5)
         for fp in attractor.particles:
             fp.move()
-            pygame.draw.circle(screen, "white", (fp.x, fp.y), 2)
+            pygame.draw.circle(screen_buffer, "white", (fp.x, fp.y), attractor.particle_size)
 
-    # flip() the display to put your work on screen
+    # Add new things
+    if ticks % 60 == 0:
+        # Create attractor
+        simulation.append(Attractor(
+            screen_buffer.get_width() // 2, screen_buffer.get_height() // 2,
+            random.randint(-10, 10) * 0.1,
+            random.randint(-10, 10) * 0.1,
+            ))
+        # Create particles 
+        for i in range(random.randint(3, 50)):
+            att = simulation[-1]
+            simulation[-1].particles.append(FluidParticle(
+                att.x + random.randint(-200, 200),
+                att.y + random.randint(-200, 200),
+                att
+                ))
+
+        # Remove the particles 
+        
+        j = 0
+        while j < len(simulation):
+            if screen_buffer.get_width() * 2 < simulation[j].x < screen_buffer.get_width() * -2:
+                del simulation[j]
+            elif screen_buffer.get_height() * 2 < simulation[j].x < screen_buffer.get_height() * -2:
+                del simulation[j]
+            else:
+                j += 1
+
+
+    ticks += 1
+
+    # Blit the buffer on to the actual screen
+    screen.blit(screen_buffer, (0,0))
+    # flip() the display to put your work on screen_buffer
     pygame.display.flip()
 
     clock.tick(60)  # limits FPS to 60
