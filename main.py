@@ -1,15 +1,96 @@
 import pygame
 import math
 import random
+from array import array
+
+import moderngl
 
 # pygame setup
 pygame.init()
 screen_buffer = pygame.Surface((1280, 720))
 lines_buffer = pygame.Surface((1280, 720))
-screen = pygame.display.set_mode((1280, 720))
+screen = pygame.display.set_mode((1280, 720), pygame.OPENGL | pygame.DOUBLEBUF)
 clock = pygame.time.Clock()
 running = True
 
+# moderngl stuff
+
+ctx = moderngl.create_context()
+
+quad_buffer = ctx.buffer(data=array('f', [
+    # position (x, y), uv coords (x, y)
+    -1.0, 1.0, 0.0, 0.0,  # topleft
+    1.0, 1.0, 1.0, 0.0,   # topright
+    -1.0, -1.0, 0.0, 1.0, # bottomleft
+    1.0, -1.0, 1.0, 1.0,  # bottomright
+]))
+
+vert_shader = '''
+#version 330 core
+
+in vec2 vert;
+in vec2 texcoord;
+out vec2 uvs;
+
+void main() {
+    uvs = texcoord;
+    gl_Position = vec4(vert, 0.0, 1.0);
+}
+'''
+
+frag_shader = '''
+#version 330 core
+
+
+uniform sampler2D tex;
+uniform float time;
+uniform float width;
+uniform float height;
+
+in vec2 uvs;
+out vec4 f_color;
+
+void make_kernel(inout vec4 n[9], sampler2D tex, vec2 coord)
+{
+	float w = 1.0 / width;
+	float h = 1.0 / height;
+
+	n[0] = texture2D(tex, coord + vec2( -w, -h));
+	n[1] = texture2D(tex, coord + vec2(0.0, -h));
+	n[2] = texture2D(tex, coord + vec2(  w, -h));
+	n[3] = texture2D(tex, coord + vec2( -w, 0.0));
+	n[4] = texture2D(tex, coord);
+	n[5] = texture2D(tex, coord + vec2(  w, 0.0));
+	n[6] = texture2D(tex, coord + vec2( -w, h));
+	n[7] = texture2D(tex, coord + vec2(0.0, h));
+	n[8] = texture2D(tex, coord + vec2(  w, h));
+}
+
+
+void main() {
+    vec4 n[9];
+	make_kernel(n, tex, gl_TexCoord[0].st );
+
+    vec4 sobel_edge_h = n[2] + (2.0*n[5]) + n[8] - (n[0] + (2.0*n[3]) + n[6]);
+    vec4 sobel_edge_v = n[0] + (2.0*n[1]) + n[2] - (n[6] + (2.0*n[7]) + n[8]);
+	vec4 sobel = sqrt((sobel_edge_h * sobel_edge_h) + (sobel_edge_v * sobel_edge_v));
+
+
+    f_color = vec4(1.0 - sobel.rgb, 1.0);
+    // f_color = vec4(texture(tex, uvs).rgb, 1.0);
+}
+
+'''
+
+program = ctx.program(vertex_shader=vert_shader, fragment_shader=frag_shader)
+render_object = ctx.vertex_array(program, [(quad_buffer, '2f 2f', 'vert', 'texcoord')])
+
+def surf_to_texture(surf):
+    tex = ctx.texture(surf.get_size(), 4)
+    tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    tex.swizzle = 'BGRA'
+    tex.write(surf.get_view('1'))
+    return tex
 
 # Simulation parameters
 min_distance = 10 # min distance between attractor and fluid particles
@@ -106,7 +187,6 @@ while running:
 
     # fill the screen_buffer with a color to wipe away anything from last frame
     screen_buffer.fill("black")
-    lines_buffer.fill("black")
 
     # RENDER YOUR GAME HERE
 
@@ -148,43 +228,21 @@ while running:
 
     ticks += 1
 
+    frame_tex = surf_to_texture(screen_buffer)
+    frame_tex.use(0)
+    program['tex'] = 0
+    program['width'] = screen_buffer.get_width()
+    program['height'] = screen_buffer.get_height()
 
-    # Screen buffer array 
-    sb_array = pygame.PixelArray(screen_buffer)
-    lb_array = pygame.PixelArray(lines_buffer)
 
-    sb_array.replace(pygame.Color(255,255,255), pygame.Color(255,255,0))
+    render_object.render(mode=moderngl.TRIANGLE_STRIP)
 
-    # iterate over and apply a sobel filter
-    for x in range(2, screen_buffer.get_width() - 2):
-        for y in range(2, screen_buffer.get_height() - 2):
-            try:
-                side = 0
-                # Horizontal
-                side += sb_array[x - 1, y - 1]
-                side += sb_array[x - 1,y     ] * 2
-                side += sb_array[x - 1, y + 1]
-                # other side
-                side += -1 * sb_array[x + 1,y - 1]
-                side += -1 * sb_array[x + 1,y    ] * 2
-                side += -1 * sb_array[x + 1,y + 1]
-
-                if abs(side) > 0: lb_array[x, y] = 0xFFFFFF
-
-            except Exception as e:
-                print(f" x {x} , y {y}")
-                raise e
 
             
-
-    # Blit the buffer on to the actual screen
-    sb_array.close()
-    lb_array.close()
-
-    # Blit the buffer on to the actual screen
-    screen.blit(lines_buffer, (0,0))
     # flip() the display to put your work on screen_buffer
     pygame.display.flip()
+
+    frame_tex.release()
 
     clock.tick(60)  # limits FPS to 60
 
