@@ -5,6 +5,7 @@ import random
 # pygame setup
 pygame.init()
 screen_buffer = pygame.Surface((1280, 720))
+lines_buffer = pygame.Surface((1280, 720))
 screen = pygame.display.set_mode((1280, 720))
 clock = pygame.time.Clock()
 running = True
@@ -105,6 +106,7 @@ while running:
 
     # fill the screen_buffer with a color to wipe away anything from last frame
     screen_buffer.fill("black")
+    lines_buffer.fill("black")
 
     # RENDER YOUR GAME HERE
 
@@ -144,11 +146,43 @@ while running:
             else:
                 j += 1
 
-
     ticks += 1
 
+
+    # Screen buffer array 
+    sb_array = pygame.PixelArray(screen_buffer)
+    lb_array = pygame.PixelArray(lines_buffer)
+
+    sb_array.replace(pygame.Color(255,255,255), pygame.Color(255,255,0))
+
+    # iterate over and apply a sobel filter
+    for x in range(2, screen_buffer.get_width() - 2):
+        for y in range(2, screen_buffer.get_height() - 2):
+            try:
+                side = 0
+                # Horizontal
+                side += sb_array[x - 1, y - 1]
+                side += sb_array[x - 1,y     ] * 2
+                side += sb_array[x - 1, y + 1]
+                # other side
+                side += -1 * sb_array[x + 1,y - 1]
+                side += -1 * sb_array[x + 1,y    ] * 2
+                side += -1 * sb_array[x + 1,y + 1]
+
+                if abs(side) > 0: lb_array[x, y] = 0xFFFFFF
+
+            except Exception as e:
+                print(f" x {x} , y {y}")
+                raise e
+
+            
+
     # Blit the buffer on to the actual screen
-    screen.blit(screen_buffer, (0,0))
+    sb_array.close()
+    lb_array.close()
+
+    # Blit the buffer on to the actual screen
+    screen.blit(lines_buffer, (0,0))
     # flip() the display to put your work on screen_buffer
     pygame.display.flip()
 
