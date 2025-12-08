@@ -41,7 +41,6 @@ void main() {
 frag_shader = '''
 #version 330 core
 
-
 uniform sampler2D tex;
 uniform float time;
 uniform float width;
@@ -50,34 +49,35 @@ uniform float height;
 in vec2 uvs;
 out vec4 f_color;
 
-void make_kernel(inout vec4 n[9], sampler2D tex, vec2 coord)
-{
-	float w = 1.0 / width;
-	float h = 1.0 / height;
-
-	n[0] = texture2D(tex, coord + vec2( -w, -h));
-	n[1] = texture2D(tex, coord + vec2(0.0, -h));
-	n[2] = texture2D(tex, coord + vec2(  w, -h));
-	n[3] = texture2D(tex, coord + vec2( -w, 0.0));
-	n[4] = texture2D(tex, coord);
-	n[5] = texture2D(tex, coord + vec2(  w, 0.0));
-	n[6] = texture2D(tex, coord + vec2( -w, h));
-	n[7] = texture2D(tex, coord + vec2(0.0, h));
-	n[8] = texture2D(tex, coord + vec2(  w, h));
-}
-
-
 void main() {
-    vec4 n[9];
-	make_kernel(n, tex, gl_TexCoord[0].st );
+    vec2 pixelSize = vec2(1.0/ width, 1.0 / height);
+    
+    float lsum = 0;
+    float rsum = 0;
+    float usum = 0;
+    float dsum = 0;
 
-    vec4 sobel_edge_h = n[2] + (2.0*n[5]) + n[8] - (n[0] + (2.0*n[3]) + n[6]);
-    vec4 sobel_edge_v = n[0] + (2.0*n[1]) + n[2] - (n[6] + (2.0*n[7]) + n[8]);
-	vec4 sobel = sqrt((sobel_edge_h * sobel_edge_h) + (sobel_edge_v * sobel_edge_v));
+    vec4 one = vec4(1.0, 1.0, 1.0, 1.0);
 
+    lsum += dot(one, texture(tex, uvs + vec2(-1, -1) * pixelSize)) * -1;
+    lsum += dot(one, texture(tex, uvs + vec2(-1,  0) * pixelSize)) * -2;
+    lsum += dot(one, texture(tex, uvs + vec2(-1,  1) * pixelSize)) * -1;
 
-    f_color = vec4(1.0 - sobel.rgb, 1.0);
-    // f_color = vec4(texture(tex, uvs).rgb, 1.0);
+    rsum += dot(one, texture(tex, uvs + vec2( 1, -1) * pixelSize)) *  1;
+    rsum += dot(one, texture(tex, uvs + vec2( 1,  0) * pixelSize)) *  2;
+    rsum += dot(one, texture(tex, uvs + vec2( 1,  1) * pixelSize)) *  1;
+
+    usum += dot(one, texture(tex, uvs + vec2(-1, -1) * pixelSize)) * -1;
+    usum += dot(one, texture(tex, uvs + vec2( 0, -1) * pixelSize)) * -2;
+    usum += dot(one, texture(tex, uvs + vec2( 1, -1) * pixelSize)) * -1;
+
+    dsum += dot(one, texture(tex, uvs + vec2(-1,  1) * pixelSize)) *  1;
+    dsum += dot(one, texture(tex, uvs + vec2( 0,  1) * pixelSize)) *  2;
+    dsum += dot(one, texture(tex, uvs + vec2( 1,  1) * pixelSize)) *  1;
+
+    float sobel = sqrt(abs(rsum + lsum) + abs(usum + dsum));
+
+    f_color = vec4(sobel, sobel, sobel, 1.0);
 }
 
 '''
@@ -189,8 +189,6 @@ while running:
     screen_buffer.fill("black")
 
     # RENDER YOUR GAME HERE
-
-    pygame.draw.circle(screen_buffer, "yellow", (512, 512), 5)
 
     for attractor in simulation:
         attractor.move()
