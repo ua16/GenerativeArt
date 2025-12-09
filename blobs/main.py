@@ -76,6 +76,7 @@ void main() {
     dsum += dot(one, texture(tex, uvs + vec2( 1,  1) * pixelSize)) *  1;
 
     float sobel = sqrt(abs(rsum + lsum) + abs(usum + dsum));
+    sobel = step(0.8, sobel);
 
     f_color = vec4(sobel, sobel, sobel, 1.0);
 }
@@ -114,11 +115,13 @@ class Attractor:
         self.dy = dy
         self.particle_size = 0
         self.particles = []
+        self.max_particle_size = max_particle_size + random.randint(-10, 10)
         return
+
     def move(self):
         self.x += self.dx
         self.y += self.dy
-        if self.particle_size < max_particle_size : self.particle_size += 0.1
+        if self.particle_size < self.max_particle_size : self.particle_size += 0.5
 
     def getVector(self):
         return pygame.Vector2(self.x, self.y)
@@ -200,7 +203,7 @@ while running:
     if ticks % 60 == 0:
         # Create attractor
         simulation.append(Attractor(
-            screen_buffer.get_width() // 2, screen_buffer.get_height() // 2,
+            screen_buffer.get_width() // 2 + random.randint(-200, 200), screen_buffer.get_height() // 2 + random.randint(-200, 200),
             random.randint(-10, 10) * 0.1,
             random.randint(-10, 10) * 0.1,
             ))
@@ -217,10 +220,12 @@ while running:
         
         j = 0
         while j < len(simulation):
-            if screen_buffer.get_width() * 2 < simulation[j].x < screen_buffer.get_width() * -2:
+            if screen_buffer.get_width() * 2 < simulation[j].x or simulation[j].x < screen_buffer.get_width() * -2:
                 del simulation[j]
-            elif screen_buffer.get_height() * 2 < simulation[j].x < screen_buffer.get_height() * -2:
+                print("removed")
+            elif screen_buffer.get_height() * 2 < simulation[j].y or simulation[j].y < screen_buffer.get_height() * -2:
                 del simulation[j]
+                print("removed")
             else:
                 j += 1
 
